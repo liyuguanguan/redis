@@ -13,6 +13,8 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.junit4.SpringRunner;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * redisString
  * @Author: liyu.guan
@@ -32,19 +34,19 @@ public class RedisString {
     @Test
     public void test(){
         // 设置值
-        redisUtil.set("dsa", "1");
+        stringRedisTemplate.opsForValue().set("dsa", "1");
         // 增加1
-        redisUtil.incr("dsa", 1);
-        // 减去2
-        redisUtil.decr("dsa", 2);
-        // 减去1
-        // redis命令
-        // DECR(key)  -1
-        // DECRBY (kEY decrement) - decrement
-        redisTemplate.opsForValue().decrement("dsa");
-        // 增加1
-        // redis命令 INCRBY 同上
-        redisTemplate.opsForValue().increment("dsa");
+//        stringRedisTemplate.opsForValue().increment("dsa", 1);
+//        // 减去2
+//        stringRedisTemplate.opsForValue().decrement("dsa", 2);
+//        // 减去1
+//        // redis命令
+//        // DECR(key)  -1
+//        // DECRBY (kEY decrement) - decrement
+//        stringRedisTemplate.opsForValue().decrement("dsa");
+//        // 增加1
+//        // redis命令 INCRBY 同上
+//        stringRedisTemplate.opsForValue().increment("dsa");
     }
 
     /**
@@ -97,12 +99,13 @@ public class RedisString {
 
     /**
      * 获取键对应值的ascii码的在offset处位值
-     * Redis Documentation: GETBIT
+     * Redis Documentation: GETBIT 下标从1开始
      */
     @Test
     public void getbit(){
         // 'a' 的ASCII码是 97。转换为二进制是：1100001
-        redisTemplate.opsForValue().set("bittest","a");
+        redisTemplate.opsForValue().set("bittest",1100001);
+        System.out.println(redisTemplate.opsForValue().get("bittest"));;
         System.out.println(redisTemplate.opsForValue().getBit("bittest", 1));;
         System.out.println(redisTemplate.opsForValue().getBit("bittest", 2));;
         System.out.println(redisTemplate.opsForValue().getBit("bittest", 3));;
@@ -110,6 +113,7 @@ public class RedisString {
         System.out.println(redisTemplate.opsForValue().getBit("bittest", 5));;
         System.out.println(redisTemplate.opsForValue().getBit("bittest", 6));;
         System.out.println(redisTemplate.opsForValue().getBit("bittest", 7));;
+        System.out.println(redisTemplate.opsForValue().getBit("bittest", 8));;
 
     }
 
@@ -129,6 +133,44 @@ public class RedisString {
                 return null;
             }
         });
+
+
     }
 
+
+    /**
+     * 删除
+     */
+    @Test
+    public void del(){
+        redisTemplate.opsForValue().set("del","123");
+        redisTemplate.delete("del");
+    }
+
+    /**
+     * 互斥锁 针对缓存击穿方案
+     * @param key
+     * @return
+     * @throws InterruptedException
+     */
+    String mutex(String key) throws InterruptedException {
+        String value = redisTemplate.opsForValue().get(key).toString();
+        if (value  == null) {
+            // 设置3min的超时，防止del操作失败的时候，下次缓存过期一直不能load db
+            if (redisTemplate.opsForValue().setIfAbsent(key+"_mutex","1",3,TimeUnit.MINUTES)) {
+
+                // 数据库获取值
+//                value = db.get(key);
+                redisTemplate.opsForValue().set(key, value);
+                redisTemplate.delete(key+"_mutex");
+            } else {
+                //其他线程休息50毫秒后重试
+                Thread.sleep(50);
+                redisTemplate.opsForValue().get(key);
+            }
+            return value;
+        } else {
+            return value;
+        }
+    }
 }
